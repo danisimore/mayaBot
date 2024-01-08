@@ -10,7 +10,7 @@ def get_main_keyboard() -> types.InlineKeyboardMarkup:
 
     kb = [
         [
-            types.InlineKeyboardButton(text="Хочу скидку!", callback_data="discount"),
+            types.InlineKeyboardButton(text="Хочу скидку! 💸", callback_data="discount"),
             types.InlineKeyboardButton(text="Посмотреть ассортимент", callback_data="test2"),
         ]
     ]
