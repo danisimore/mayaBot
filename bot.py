@@ -4,38 +4,25 @@ import os
 from dotenv import load_dotenv
 
 from aiogram.enums import ParseMode
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart
+from aiogram import Bot, Dispatcher
 
-from keyboards.main_keyboard import get_main_keyboard
+from handlers import main_menu_handler
 
 
 load_dotenv('.env')
 
 API_TOKEN = os.environ.get('API_TOKEN')
 
-bot = Bot(token=API_TOKEN, parse_mode=ParseMode.HTML)
-dp = Dispatcher()
-
-
-@dp.message(CommandStart())
-async def cmd_start(message: types.Message) -> None:
-    username = message.from_user.username
-
-    await message.answer(text="Главное меню")
-
-    await message.answer(
-        text=f"Доброго времени суток <b>{username}</b> 👋!\n\nДобро пожаловать в бота Цветы Майя.\n\n"
-        "Данный бот поможет вам выбрать лучший букет 💐, за сумму на которую вы рассчитываете.\n\n"    
-        "Мы внимательно контролируем логистику и сроки доставки каждого букета 🧐. У нас "
-        "работает команда профессиональных флористов, которые подберут и составят яркий "
-        "букет на любой вкус и случай.\n\n"
-        "Для нас дорог каждый клиент 🙏!",
-        reply_markup=get_main_keyboard()
-    )
-
 
 async def main() -> None:
+    """ Главная функция, которая запускает бота. """
+
+    bot = Bot(token=API_TOKEN, parse_mode=ParseMode.HTML)
+    dp = Dispatcher()
+
+    dp.include_routers(main_menu_handler.router)
+
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 
