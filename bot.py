@@ -8,16 +8,15 @@ from aiogram import Bot, Dispatcher
 
 from handlers import main_menu_handler
 
-
 load_dotenv('.env')
 
 API_TOKEN = os.environ.get('API_TOKEN')
+bot = Bot(token=API_TOKEN, parse_mode=ParseMode.HTML)
 
 
 async def main() -> None:
     """ Главная функция, которая запускает бота. """
 
-    bot = Bot(token=API_TOKEN, parse_mode=ParseMode.HTML)
     dp = Dispatcher()
 
     dp.include_routers(main_menu_handler.router)
