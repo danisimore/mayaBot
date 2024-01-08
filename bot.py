@@ -7,6 +7,9 @@ from aiogram.enums import ParseMode
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 
+from keyboards.main_keyboard import get_main_keyboard
+
+
 load_dotenv('.env')
 
 API_TOKEN = os.environ.get('API_TOKEN')
@@ -27,7 +30,8 @@ async def cmd_start(message: types.Message) -> None:
         "Мы внимательно контролируем логистику и сроки доставки каждого букета 🧐. У нас "
         "работает команда профессиональных флористов, которые подберут и составят яркий "
         "букет на любой вкус и случай.\n\n"
-        "Для нас дорог каждый клиент 🙏!"
+        "Для нас дорог каждый клиент 🙏!",
+        reply_markup=get_main_keyboard()
     )
 
 
