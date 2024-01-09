@@ -227,7 +227,7 @@ async def discount_no_patronymic_handler(callback: CallbackData, state: FSMConte
     :return:
     """
 
-    await state.update_data(user_entered_patronimyc="Отчество отсутствует")
+    await state.update_data(user_entered_patronymic="Отчество отсутствует")
 
     user_id = callback.from_user.id
 
@@ -268,7 +268,7 @@ async def discount_entered_patronymic_handler(message: types.Message, state: FSM
         "Отменить и вернуться в главное меню": "cancel",
     }
 
-    await state.update_data(user_entered_patronimyc=message.text)
+    await state.update_data(user_entered_patronymic=message.text)
 
     await message.answer(
         text="Осталось уточнить только последнюю деталь! Пожалуйста, введите ваш номер телефона\n\n"
@@ -297,4 +297,27 @@ async def discount_entered_phone_number_handler(message: types.Message, state: F
 
     await state.update_data(user_entered_phone_number=message.text)
 
+    user_data = await state.get_data()
 
+    # Словарь содержащий данные ТЕКСТ_КНОПКИ : CALLBACK_DATA
+    keyboard_structure = {
+        "Все верно!": "data_is_correct",
+        "Начать сначала": "discount_yes",
+    }
+
+    await message.answer(
+        text="Пожалуйста, проверьте корректность введенных вами данных.\n\n"
+             "<i>Если вы допустили ошибку, пожалуйста, заполните данные заново.</i>",
+    )
+
+    user_data_string = f"""
+    Имя: {user_data.get('user_entered_name')}
+Фамилия: {user_data.get('user_entered_last_name')}
+Отчество: {user_data.get('user_entered_patronymic')}\n
+Номер телефона: {user_data.get('user_entered_phone_number')}
+    """
+
+    await message.answer(
+        text=user_data_string,
+        reply_markup=get_inline_keyboard(keyboard_structure, 1, 1),
+    )
