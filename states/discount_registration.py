@@ -8,3 +8,5 @@ class DiscountRegistration(StatesGroup):
 
     making_decision = State()
     entering_name = State()
+    entering_last_name = State()
+    entering_patronymic = State()
