@@ -11,7 +11,7 @@ def get_yes_no_keyboard() -> types.InlineKeyboardMarkup:
     kb = [
         [
             types.InlineKeyboardButton(text="ДА!", callback_data="discount_yes"),
-            types.InlineKeyboardButton(text="Пожалуй позже", callback_data="discount_later"),
+            types.InlineKeyboardButton(text="Пожалуй позже", callback_data="cancel"),
         ]
     ]
 
