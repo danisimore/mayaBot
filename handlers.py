@@ -13,6 +13,8 @@ from states.discount_registration import DiscountRegistration
 
 from keyboards.inline_keyboard_builder import get_inline_keyboard
 
+from services.phone_number_validator import phone_num_validator
+
 router = Router()
 
 main_inline_keyboard_structure = {
@@ -282,7 +284,7 @@ async def discount_entered_patronymic_handler(message: types.Message, state: FSM
 @router.message(DiscountRegistration.entering_phone_number)
 async def discount_entered_phone_number_handler(message: types.Message, state: FSMContext) -> None:
     """
-    Handler для обработки сообщения с номером телефона пользователя, а также дял проверки введенных данных
+    Handler для обработки сообщения с номером телефона пользователя, а также для проверки введенных данных
     пользователем.
 
     ---
@@ -295,29 +297,46 @@ async def discount_entered_phone_number_handler(message: types.Message, state: F
     :return:
     """
 
-    await state.update_data(user_entered_phone_number=message.text)
+    is_number_correct = phone_num_validator(message.text)
 
-    user_data = await state.get_data()
+    if is_number_correct:
+        await state.update_data(user_entered_phone_number=message.text)
 
-    # Словарь содержащий данные ТЕКСТ_КНОПКИ : CALLBACK_DATA
-    keyboard_structure = {
-        "Все верно!": "data_is_correct",
-        "Начать сначала": "discount_yes",
-    }
+        user_data = await state.get_data()
 
-    await message.answer(
-        text="Пожалуйста, проверьте корректность введенных вами данных.\n\n"
-             "<i>Если вы допустили ошибку, пожалуйста, заполните данные заново.</i>",
-    )
+        # Словарь содержащий данные ТЕКСТ_КНОПКИ : CALLBACK_DATA
+        keyboard_structure = {
+            "Все верно!": "data_is_correct",
+            "Начать сначала": "discount_yes",
+        }
 
-    user_data_string = f"""
-    Имя: {user_data.get('user_entered_name')}
+        await message.answer(
+            text="Пожалуйста, проверьте корректность введенных вами данных.\n\n"
+                 "<i>Если вы допустили ошибку, пожалуйста, заполните данные заново.</i>",
+        )
+
+        user_data_string = f"""
+        Имя: {user_data.get('user_entered_name')}
 Фамилия: {user_data.get('user_entered_last_name')}
 Отчество: {user_data.get('user_entered_patronymic')}\n
 Номер телефона: {user_data.get('user_entered_phone_number')}
-    """
+        """
 
-    await message.answer(
-        text=user_data_string,
-        reply_markup=get_inline_keyboard(keyboard_structure, 1, 1),
-    )
+        await message.answer(
+            text=user_data_string,
+            reply_markup=get_inline_keyboard(keyboard_structure, 1, 1),
+        )
+    else:
+        # Словарь содержащий данные ТЕКСТ_КНОПКИ : CALLBACK_DATA
+        keyboard_structure = {
+            "Начать сначала": "discount_yes",
+            "Отменить и вернуться в главное меню": "cancel",
+        }
+
+        await message.answer(
+            text="Введенный номер некорректен! Пожалуйста, введите номер телефона в формате:\n\n"
+                 "+7"
+                 "<b>Внимание, указывайте свой настоящий номер телефона, иначе заявка будет отклонена оператором!</b>",
+            reply_markup=get_inline_keyboard(keyboard_structure, 1, 1),
+        )
+
