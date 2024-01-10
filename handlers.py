@@ -1,3 +1,60 @@
+"""
+Модуль с хэндлерами, которые обрабатывают различные события.
+
+
+Автор: danisimore
+Дата: 10.01.2024
+
+
+• cmd_start - обработка команды start, если id пользователя, совпадает с MANAGER_CHAT_ID из .env файла, то
+              отправляется сообщение "Активирован режим администратора!" и далее ничего не происходит, т.к.
+              этот режим подразумевает ожидание сообщений от бота с данными о пользователе, который прошел
+              регистрацию в дисконтной программе. Иначе отправляет сообщение с главным меню;
+
+• discount_handler - обрабатывает нажатие кнопки 'Хочу скидку! 💸'. Устанавливает состояние конечного автомата
+                     в making_decision. На этом этапе бот информирует пользователя о дисконтной программе
+                     и предлагает в ней зарегистрироваться либо вернуться в главное меню;
+
+• discount_later_handler - Handler для обработки события нажатия кнопки 'Пожалуй позже'. Сценарий, если пользователь
+                           отказался от регистрации в дисконтной программе. Возвращает пользователя в
+                           главное меню путем вызова функции show_main_menu_from_callback из модуля show_main_menu;
+
+• discount_yes_handler - Handler для обработки события нажатия кнопки 'ДА!'. Сценарий, если пользователь согласился
+                         на регистрацию в дисконтной программе. Проверяет зарегистрирован ли пользователь в дисконтной
+                         программе путем вызова функции select_user_data. Если она возвращает False, то процесс
+                         регистрации продолжается и бот запрашивает у пользователя имя, устанавливая состояние конечного
+                         автомата в entering_name. Если select_user_data возвращает True, то пользователю отправляется
+                         сообщение с главным меню, путем вызова функции show_main_menu_from_callback.
+
+• discount_entered_name_handler - Handler для обработки введенного пользователем имени, срабатывает только если
+                                  состояние конечного автомата entering_name. Сохраняет в state введенное имя и
+                                  устанавливает FSM в entering_last_name.
+
+• discount_entered_last_name_handler - Handler для обработки введенной пользователем фамилии, срабатывает только если
+                                       FSM entering_last_name. Сохраняет в state введенную фамилию и устанавливает
+                                       FSM в entering_patronymic.
+
+• discount_no_patronymic_handler - Handler для обработки сценария, если у пользователя нет отчества. В state
+                                   сохраняет значение "Отчество отсутствует" и переводит пользователя на следующий
+                                   шаг - ввод номера телефона, устанавливая при этом FSM entering_phone_number.
+
+• discount_entered_patronymic_handler - Handler для обработки введенного пользователем отчества, срабатывает только если
+                                        FSM entering_patronymic. Также переводит пользователя на шаг ввода номера
+                                        телефона, устанавливая FSM entering_phone_number.
+
+• discount_entered_phone_number_handler - Handler для обработки введенного пользователем номера телефона, а также
+                                          проверки корректности введенных им данных. Срабатывает только если FSM
+                                          entering_phone_number. Просит ввести номер телефона еще раз,
+                                          если он не прошел валидацию. Далее выводит пользователю всю введенную им
+                                          информацию и устанавливает FSM в checking_entered_data, предлагая пользователю
+                                          подтвердить корректность введенных данных или заполнить все снова.
+
+• discount_data_is_correct_handler - Handler для обработки сценария, если пользователь подтвердил, что данные корректны.
+                                     Сбрасывает состояния и вносит его username и номер телефона в БД, отправляя при
+                                     этом все данные менеджеру, id которого указан в переменной окружения
+                                     MANAGER_CHAT_ID.
+"""
+
 import os
 
 import bot_message_texts
@@ -12,13 +69,17 @@ from aiogram.fsm.context import FSMContext
 
 from dotenv import load_dotenv
 
-from bot import bot
+from main import bot
 from states.discount_registration import DiscountRegistration
 
 from keyboards.inline_keyboard_builder import get_inline_keyboard
 
 from services.phone_number_validator import phone_num_validator
 from services.generate_user_data import generate_user_data
+from services.show_main_menu import show_main_menu_from_callback
+
+from database.insert_user_data import insert_user_data
+from database.select_user_data import select_user_data
 
 load_dotenv('.env')
 
@@ -121,22 +182,14 @@ async def discount_later_handler(callback: CallbackData, state: FSMContext) -> N
     :return:
     """
 
-    user_id = callback.from_user.id
-    first_name = callback.from_user.first_name
+    inline_keyboard = get_inline_keyboard(MAIN_INLINE_KEYBOARD_STRUCTURE)
 
-    await bot.send_message(
-        chat_id=user_id,
-        text=bot_message_texts.MAIN_MENU,
+    await show_main_menu_from_callback(
+        callback=callback,
+        bot=bot,
+        inline_keyboard=inline_keyboard,
+        state=state
     )
-
-    await bot.send_message(
-        chat_id=user_id,
-        text=bot_message_texts.MAIN_MENU_TEXT % first_name,
-        reply_markup=get_inline_keyboard(MAIN_INLINE_KEYBOARD_STRUCTURE)
-    )
-
-    # Так как пользователь отказывается от оформления дисконта, устанавливаем состояние None.
-    await state.set_state(None)
 
 
 @router.callback_query(F.data == "discount_yes")
@@ -156,20 +209,39 @@ async def discount_yes_handler(callback: CallbackData, state: FSMContext) -> Non
     """
 
     user_id = callback.from_user.id
+    username = callback.from_user.username
 
-    # Словарь содержащий данные ТЕКСТ_КНОПКИ : CALLBACK_DATA
-    keyboard_structure = {
-        "Отменить и вернуться в главное меню": "cancel",
-    }
+    is_registered = select_user_data(username)
 
-    await bot.send_message(
-        chat_id=user_id,
-        text="Отлично, теперь мне необходимо узнать ваше имя.\nПожалуйста, напишите мне свое имя)\n\n"
-             "<b>Внимание, указывайте свое настоящее имя, иначе заявка будет отклонена оператором!</b>",
-        reply_markup=get_inline_keyboard(keyboard_structure),
-    )
+    if not is_registered:
+        # Словарь содержащий данные ТЕКСТ_КНОПКИ : CALLBACK_DATA
+        keyboard_structure = {
+            "Отменить и вернуться в главное меню": "cancel",
+        }
 
-    await state.set_state(DiscountRegistration.entering_name)
+        await bot.send_message(
+            chat_id=user_id,
+            text="Отлично, теперь мне необходимо узнать ваше имя.\nПожалуйста, напишите мне свое имя)\n\n"
+                 "<b>Внимание, указывайте свое настоящее имя, иначе заявка будет отклонена оператором!</b>",
+            reply_markup=get_inline_keyboard(keyboard_structure),
+        )
+
+        await state.set_state(DiscountRegistration.entering_name)
+    else:
+        await bot.send_message(
+            chat_id=user_id,
+            text="Вы уже зарегистрированы в дисконтной программе!\n\n"
+                 "Спасибо за то, что выбрали нас ❤",
+        )
+
+        inline_keyboard = get_inline_keyboard(MAIN_INLINE_KEYBOARD_STRUCTURE)
+
+        await show_main_menu_from_callback(
+            callback=callback,
+            bot=bot,
+            inline_keyboard=inline_keyboard,
+            state=state
+        )
 
 
 @router.message(DiscountRegistration.entering_name)
@@ -232,7 +304,7 @@ async def discount_entered_last_name_handler(message: types.Message, state: FSMC
 @router.callback_query(F.data == "no_patronymic")
 async def discount_no_patronymic_handler(callback: CallbackData, state: FSMContext) -> None:
     """
-    Handler, для обработки события, если у пользователя нету отчества.
+    Handler, для обработки события, если у пользователя нет отчества.
 
     ---
     /start -> Хочу скидку! 💸 -> ДА! -> Ввод имени -> Ввод фамилии -> Ввод отчества -> У меня нет отчества
@@ -286,8 +358,8 @@ async def discount_entered_patronymic_handler(message: types.Message, state: FSM
 @router.message(DiscountRegistration.entering_phone_number)
 async def discount_entered_phone_number_handler(message: types.Message, state: FSMContext) -> None:
     """
-    Handler для обработки сообщения с номером телефона пользователя, а также для проверки введенных данных
-    пользователем.
+    Handler для обработки сообщения с номером телефона пользователя, а также проверки корректности введенных им
+    данных.
 
     ---
     /start -> Хочу скидку! 💸 -> ДА! -> Ввод имени -> Ввод фамилии -> Ввод отчества -> (У меня нет отчества) ->
@@ -382,3 +454,5 @@ async def discount_data_is_correct_handler(callback: CallbackData, state: FSMCon
         chat_id=MANAGER_CHAT_ID,
         text=bot_message_texts.DISCOUNT_REGISTRATION_APPLICATION % user_data_string
     )
+
+    insert_user_data(username=user_telegram_username, phone_number=user_data.get('user_entered_phone_number'))
